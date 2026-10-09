@@ -3,6 +3,53 @@ use macroquad::prelude::*;
 use rustfft::{num_complex::Complex, FftPlanner};
 use std::sync::atomic::{AtomicU32, Ordering};
 
+// ==========================================
+// --- CONFIGURATION / MAGIC NUMBERS ---
+// ==========================================
+
+// Audio & FFT Settings
+const AUDIO_BUFFER_SIZE: usize = 1024;
+const BASS_BIN_START: usize = 1;
+const BASS_BIN_END: usize = 6;
+const MID_BIN_START: usize = 12;
+const MID_BIN_END: usize = 45;
+const SMOOTHING_OLD: f32 = 0.7;
+const SMOOTHING_NEW: f32 = 0.3;
+const BASS_NORM_FACTOR: f32 = 6.0;
+const MID_NORM_FACTOR: f32 = 34.0;
+
+// Visual Layout Settings
+const FONT_SIZE: f32 = 18.0;
+const TAIL_LENGTH: usize = 20;
+const DROP_MIN_START_Y: f32 = -50.0;
+const DROP_MAX_START_Y: f32 = 0.0;
+const DROP_MIN_RESET_Y: f32 = -30.0;
+const DROP_MAX_RESET_Y: f32 = 0.0;
+
+// Speed & Movement Settings
+const FALL_SPEED_BASE: f32 = 0.25;
+const FALL_SPEED_REACTIVE: f32 = 0.8;
+const REACTIVE_SPEED_BASS_THRESHOLD: f32 = 15.0;
+const REACTIVE_SPEED_CHANCE: f32 = 0.5;
+const CHAR_CHANGES_PER_SECOND: f64 = 5.0; // How many times per second the characters flip
+
+// Audio Reactivity Adjustments
+const BASS_OVERDRIVE_THRESHOLD: f32 = 12.0;
+const BASS_OVERDRIVE_DIVISOR: f32 = 15.0;
+const MID_ALPHA_MULTIPLIER: f32 = 0.01;
+
+// Colors
+const HEAD_COLOR_R: f32 = 0.9;
+const HEAD_COLOR_G: f32 = 1.0;
+const HEAD_COLOR_B: f32 = 0.9;
+const HEAD_COLOR_A: f32 = 1.0;
+
+// Math Primes (Used for character randomization hashing)
+const HASH_PRIME_1: u64 = 137;
+const HASH_PRIME_2: u64 = 251;
+
+// ==========================================
+
 // Shared atomic variables for audio-visual synchronization
 static BASS_VAL: AtomicU32 = AtomicU32::new(0);
 static MID_VAL: AtomicU32 = AtomicU32::new(0);
@@ -42,8 +89,8 @@ where
     f32: cpal::FromSample<T>,
 {
     let mut planner = FftPlanner::new();
-    let fft = planner.plan_fft_forward(1024);
-    let mut buffer = vec![0.0f32; 1024];
+    let fft = planner.plan_fft_forward(AUDIO_BUFFER_SIZE);
+    let mut buffer = vec![0.0f32; AUDIO_BUFFER_SIZE];
     let mut idx = 0;
 
     let stream = device.build_input_stream(
@@ -53,7 +100,7 @@ where
                 buffer[idx] = sample.to_sample::<f32>();
                 idx += 1;
                 
-                if idx >= 1024 {
+                if idx >= AUDIO_BUFFER_SIZE {
                     // Convert audio buffer into complex numbers for FFT
                     let mut complex_buffer: Vec<Complex<f32>> = buffer
                         .iter()
@@ -64,18 +111,18 @@ where
 
                     // Analyze Frequency Bins
                     let mut bass = 0.0;
-                    for i in 1..=6 { bass += complex_buffer[i].norm(); } // Low frequencies
+                    for i in BASS_BIN_START..=BASS_BIN_END { bass += complex_buffer[i].norm(); } // Low frequencies
                     
                     let mut mid = 0.0;
-                    for i in 12..=45 { mid += complex_buffer[i].norm(); } // Mid frequencies
+                    for i in MID_BIN_START..=MID_BIN_END { mid += complex_buffer[i].norm(); } // Mid frequencies
 
                     // Smooth values so the visual doesn't flicker violently
                     let old_bass = get_bass();
-                    let new_bass = old_bass * 0.7 + (bass / 6.0) * 0.3;
+                    let new_bass = old_bass * SMOOTHING_OLD + (bass / BASS_NORM_FACTOR) * SMOOTHING_NEW;
                     store_bass(new_bass);
 
                     let old_mid = get_mid();
-                    let new_mid = old_mid * 0.7 + (mid / 34.0) * 0.3;
+                    let new_mid = old_mid * SMOOTHING_OLD + (mid / MID_NORM_FACTOR) * SMOOTHING_NEW;
                     store_mid(new_mid);
 
                     idx = 0;
@@ -95,57 +142,106 @@ where
 async fn main() {
     let _audio_stream = build_audio_stream().expect("Failed to start audio stream");
 
-    let chars: Vec<char> = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ".chars().collect();
-    let font_size = 18.0;
+    // 1. Load the custom Space Mono font
+    let mut matrix_font = load_ttf_font("assets/SpaceMono-Regular.ttf")
+        .await
+        .expect("Failed to load font. Ensure SpaceMono-Regular.ttf is in the assets/ directory.");
+
+    // Force integer-ratio nearest-neighbor scaling so the text doesn't blur
+    matrix_font.set_filter(FilterMode::Nearest);
+
+    // Swapped to ASCII since Space Mono does not support Japanese Katakana
+    let chars: Vec<char> = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ".chars().collect();
     
-    let mut columns = (screen_width() / font_size) as usize;
-    let mut drops = vec![0.0f32; columns];
+    let mut columns = (screen_width() / FONT_SIZE) as usize;
+    
+    // STAGGER INITIALIZATION: Randomize start positions so the screen is filled immediately
+    let mut drops: Vec<f32> = (0..columns)
+        .map(|_| rand::gen_range(DROP_MIN_START_Y, screen_height() / FONT_SIZE))
+        .collect();
 
     loop {
         clear_background(BLACK);
         
         // Handle window resize dynamically
-        let current_cols = (screen_width() / font_size) as usize;
+        let current_cols = (screen_width() / FONT_SIZE) as usize;
         if current_cols != columns {
-            drops.resize(current_cols, 0.0);
+            // Fill new columns with staggered heights above the screen
+            drops.resize_with(current_cols, || rand::gen_range(DROP_MIN_START_Y, DROP_MAX_START_Y));
             columns = current_cols;
         }
 
         let bass = get_bass();
         let mid = get_mid();
 
-        // 1. Reactive Color: Heavy bass pushes the green toward bright white/cyan
-        let bass_overdrive = if bass > 12.0 { (bass - 12.0) / 15.0 } else { 0.0 };
+        let bass_overdrive = if bass > BASS_OVERDRIVE_THRESHOLD { 
+            (bass - BASS_OVERDRIVE_THRESHOLD) / BASS_OVERDRIVE_DIVISOR 
+        } else { 
+            0.0 
+        };
+        
         let r = bass_overdrive.clamp(0.0, 1.0);
         let b = bass_overdrive.clamp(0.0, 1.0);
 
-        let tail_length = 15;
-
         for i in 0..columns {
-            // 2. Reactive Speed: Bass spikes speed up the rain
-            let speed = if bass > 15.0 && rand::gen_range(0.0, 1.0) > 0.5 { 2.0 } else { 1.0 };
+            // DYNAMIC SPEED: Drops progress fractionally per frame
+            let speed = if bass > REACTIVE_SPEED_BASS_THRESHOLD && rand::gen_range(0.0, 1.0) > REACTIVE_SPEED_CHANCE { 
+                FALL_SPEED_REACTIVE 
+            } else { 
+                FALL_SPEED_BASE 
+            };
             drops[i] += speed;
 
-            // 3. Reactive Glitch: High bass resets trails at random heights
-            let glitch_chance = if bass > 18.0 { 0.90 } else { 0.99 };
-            if drops[i] * font_size > screen_height() && rand::gen_range(0.0, 1.0) > glitch_chance {
-                drops[i] = 0.0;
+            // CONTINUOUS WRAP: Reset drops to a random negative position above the screen to prevent gaps
+            if (drops[i] - TAIL_LENGTH as f32) * FONT_SIZE > screen_height() {
+                drops[i] = rand::gen_range(DROP_MIN_RESET_Y, DROP_MAX_RESET_Y);
             }
 
-            // Draw the fading trail procedurally
-            for t in 0..tail_length {
-                let y = (drops[i] - t as f32) * font_size;
+            // GRID SNAPPING: Floor the float to make characters "tick" downwards instead of sliding
+            let head_idx = drops[i].floor();
+
+            for t in 0..TAIL_LENGTH {
+                let y_idx = head_idx - t as f32;
+                let y = y_idx * FONT_SIZE;
                 
-                if y > 0.0 {
-                    let alpha = 1.0 - (t as f32 / tail_length as f32);
+                // Only draw characters that are currently on screen
+                if y > -FONT_SIZE && y < screen_height() + FONT_SIZE {
+                    let alpha = 1.0 - (t as f32 / TAIL_LENGTH as f32);
+                    let modified_alpha = (alpha + (mid * MID_ALPHA_MULTIPLIER)).clamp(0.0, 1.0);
                     
-                    // 4. Reactive Trails: Loud mids make the trails thicker/longer
-                    let modified_alpha = (alpha + (mid * 0.01)).clamp(0.0, 1.0);
+                    // BRIGHT HEAD: The leading character is bright white/green, trailing is green
+                    let color = if t == 0 {
+                        Color::new(HEAD_COLOR_R, HEAD_COLOR_G, HEAD_COLOR_B, HEAD_COLOR_A)
+                    } else {
+                        Color::new(r, 1.0, b, modified_alpha)
+                    };
                     
-                    let color = Color::new(r, 1.0, b, modified_alpha);
-                    let text = chars[rand::gen_range(0, chars.len())].to_string();
+                    // TIME-BASED CHARACTER HASHING
+                    // Control how fast the characters flip instead of changing every frame
+                    let time_step = (get_time() * CHAR_CHANGES_PER_SECOND) as u64;
+
+                    // Create a predictable hash based on the column (i), row (y_idx), and time
+                    let hash = (i as u64)
+                        .wrapping_mul(HASH_PRIME_1)
+                        .wrapping_add((y_idx as i64) as u64)
+                        .wrapping_mul(HASH_PRIME_2)
+                        .wrapping_add(time_step);
+                        
+                    let char_idx = (hash % chars.len() as u64) as usize;
+                    let text = chars[char_idx].to_string();
                     
-                    draw_text(&text, i as f32 * font_size, y, font_size, color);
+                    // 2. Use draw_text_ex to apply the custom Space Mono font
+                    draw_text_ex(
+                        &text,
+                        i as f32 * FONT_SIZE,
+                        y,
+                        TextParams {
+                            font: Some(&matrix_font),
+                            font_size: FONT_SIZE as u16,
+                            color,
+                            ..Default::default()
+                        },
+                    );
                 }
             }
         }
