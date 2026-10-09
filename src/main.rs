@@ -39,6 +39,9 @@ struct VisualConfig {
     drop_max_start_y: f32,
     drop_min_reset_y: f32,
     drop_max_reset_y: f32,
+    glitch_multiplier: f32,
+    glitch_threshold: f32,
+    glitch_char_count: usize,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -53,8 +56,6 @@ struct MovementConfig {
 
 // Hardcoded structural constraints (not hot-reloaded)
 const AUDIO_BUFFER_SIZE: usize = 512;
-const HASH_PRIME_1: u64 = 137;
-const HASH_PRIME_2: u64 = 251;
 
 // ==========================================
 
@@ -280,18 +281,19 @@ async fn main() {
                         Color::new(r_pulse, g_pulse, b_pulse, alpha)
                     };
                     
-                    let hash = (i as u64)
-                        .wrapping_mul(HASH_PRIME_1)
-                        .wrapping_add((y_idx as i64) as u64)
-                        .wrapping_mul(HASH_PRIME_2)
-                        .wrapping_add(time_step);
-                        
+                    let mut hash = (i as u64).wrapping_add(0x9e3779b97f4a7c15);
+                    hash ^= (y_idx as i64 as u64).wrapping_mul(0x517cc1b727220a95);
+                    hash ^= time_step.wrapping_mul(0x2cb8b512051c5ed1);
+                    
+                    // Xor-shift to scramble the bits thoroughly before the modulo
+                    hash ^= hash >> 32;
+                    
                     let char_idx = (hash % chars.len() as u64) as usize;
                     let text = chars[char_idx].to_string();
                     
-                    let glitch_offset = beat_envelope * 6.0; 
+                    let glitch_offset = beat_envelope * cfg.visuals.glitch_multiplier; 
                     
-                    if glitch_offset > 0.5 && t < 3 {
+                    if glitch_offset > cfg.visuals.glitch_threshold && t < cfg.visuals.glitch_char_count {
                         draw_text_ex(&text, x + glitch_offset, y, TextParams {
                             font: Some(&matrix_font),
                             font_size: cfg.visuals.font_size as u16,

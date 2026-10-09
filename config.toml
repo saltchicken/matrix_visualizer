@@ -15,6 +15,9 @@ drop_min_start_y = -50.0
 drop_max_start_y = 0.0
 drop_min_reset_y = -30.0
 drop_max_reset_y = 0.0
+glitch_multiplier = 6.0
+glitch_threshold = 0.5
+glitch_char_count = 1
 
 [movement]
 fall_speed_base = 0.05
@@ -22,4 +25,4 @@ fall_speed_beat_pump = 0.20
 beat_decay = 0.75
 beat_threshold_multi = 0.9
 beat_threshold_min = 1.5
-base_char_changes_per_sec = 1.0
+base_char_changes_per_sec = 15.0
