@@ -25,4 +25,4 @@ fall_speed_beat_pump = 0.20
 beat_decay = 0.75
 beat_threshold_multi = 0.9
 beat_threshold_min = 1.5
-base_char_changes_per_sec = 15.0
+base_char_changes_per_sec = 9.0

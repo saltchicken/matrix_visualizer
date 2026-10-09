@@ -183,12 +183,13 @@ async fn main() {
     let _audio_stream = build_audio_stream(Arc::clone(&shared_config))
         .expect("Failed to start audio stream");
 
-    let mut matrix_font = load_ttf_font("assets/SpaceMono-Regular.ttf")
+    let mut matrix_font = load_ttf_font("assets/SarasaMonoJ-Regular.ttf")
         .await
-        .expect("Failed to load font. Ensure SpaceMono-Regular.ttf is in assets/.");
+        .expect("Failed to load font.");
     matrix_font.set_filter(FilterMode::Nearest);
 
-    let chars: Vec<char> = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ".chars().collect();
+    // 2. The ultimate English + Japanese + Russian character pool
+    let chars: Vec<char> = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜАБВГДЕЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ".chars().collect();
     
     let initial_font_size = shared_config.read().unwrap().visuals.font_size;
     let mut columns = (screen_width() / initial_font_size) as usize;
