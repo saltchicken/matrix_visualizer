@@ -1,15 +1,15 @@
 [audio]
 bass_bin_start = 1
-bass_bin_end = 6
-mid_bin_start = 12
-mid_bin_end = 45
+bass_bin_end = 3
+mid_bin_start = 6
+mid_bin_end = 22
 smoothing_old = 0.7
 smoothing_new = 0.3
 bass_norm_factor = 6.0
 mid_norm_factor = 34.0
 
 [visuals]
-font_size = 28.0
+font_size = 20.0
 tail_length = 30
 drop_min_start_y = -50.0
 drop_max_start_y = 0.0

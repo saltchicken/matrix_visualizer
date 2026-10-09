@@ -52,7 +52,7 @@ struct MovementConfig {
 }
 
 // Hardcoded structural constraints (not hot-reloaded)
-const AUDIO_BUFFER_SIZE: usize = 1024;
+const AUDIO_BUFFER_SIZE: usize = 512;
 const HASH_PRIME_1: u64 = 137;
 const HASH_PRIME_2: u64 = 251;
 
@@ -129,12 +129,24 @@ where
                     let mut mid = 0.0;
                     for i in cfg.mid_bin_start..=cfg.mid_bin_end { mid += complex_buffer[i].norm(); }
 
+                    // Asymmetric smoothing for bass
                     let old_bass = get_bass();
-                    let new_bass = old_bass * cfg.smoothing_old + (bass / cfg.bass_norm_factor) * cfg.smoothing_new;
+                    let raw_bass = bass / cfg.bass_norm_factor;
+                    let new_bass = if raw_bass > old_bass {
+                        raw_bass
+                    } else {
+                        old_bass * cfg.smoothing_old + raw_bass * cfg.smoothing_new
+                    };
                     store_bass(new_bass);
 
+                    // Asymmetric smoothing for mid
                     let old_mid = get_mid();
-                    let new_mid = old_mid * cfg.smoothing_old + (mid / cfg.mid_norm_factor) * cfg.smoothing_new;
+                    let raw_mid = mid / cfg.mid_norm_factor;
+                    let new_mid = if raw_mid > old_mid {
+                        raw_mid
+                    } else {
+                        old_mid * cfg.smoothing_old + raw_mid * cfg.smoothing_new
+                    };
                     store_mid(new_mid);
 
                     idx = 0;
