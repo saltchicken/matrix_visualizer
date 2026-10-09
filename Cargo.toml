@@ -1,0 +1,11 @@
+[package]
+name = "reactive_matrix"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+macroquad = "0.4.5"
+cpal = "0.15.3"
+rustfft = "6.2.0"
+anyhow = "1.0.86"
+rand = "0.8.5"
