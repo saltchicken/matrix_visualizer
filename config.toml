@@ -1,0 +1,25 @@
+[audio]
+bass_bin_start = 1
+bass_bin_end = 6
+mid_bin_start = 12
+mid_bin_end = 45
+smoothing_old = 0.7
+smoothing_new = 0.3
+bass_norm_factor = 6.0
+mid_norm_factor = 34.0
+
+[visuals]
+font_size = 18.0
+tail_length = 10
+drop_min_start_y = -50.0
+drop_max_start_y = 0.0
+drop_min_reset_y = -30.0
+drop_max_reset_y = 0.0
+
+[movement]
+fall_speed_base = 0.10
+fall_speed_beat_pump = 0.4
+beat_decay = 0.5
+beat_threshold_multi = 0.9
+beat_threshold_min = 1.5
+base_char_changes_per_sec = 10.0
