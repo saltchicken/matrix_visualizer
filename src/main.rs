@@ -197,6 +197,7 @@ async fn main() {
 
     let mut bass_avg = 0.0;
     let mut beat_envelope = 0.0f32;
+    let mut accumulated_time = 0.0f64;
 
     loop {
         clear_background(BLACK);
@@ -248,7 +249,8 @@ async fn main() {
         beat_envelope *= cfg.movement.beat_decay; 
         
         let scramble_speed = cfg.movement.base_char_changes_per_sec + (mid as f64 * 0.4) + (beat_envelope as f64 * 25.0);
-        let time_step = (get_time() * scramble_speed) as u64;
+        accumulated_time += get_frame_time() as f64 * scramble_speed;
+        let time_step = accumulated_time as u64;
 
         for i in 0..columns {
             let speed = (cfg.movement.fall_speed_base + (cfg.movement.fall_speed_beat_pump * beat_envelope)) * drop_speeds[i];
